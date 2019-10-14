@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 import scipy.stats as stat
-import seaborn as sns
+import seaborn as sns; sns.set()
 from math import pow
 from fancyimpute import SimpleFill, KNN, SoftImpute, IterativeSVD, IterativeImputer, MatrixFactorization
 from matplotlib.patches import Ellipse
@@ -10,6 +10,9 @@ from sklearn.preprocessing import StandardScaler
 from itertools import combinations
 from impyute.imputation.cs import em
 
+
+#TODO
+# Everything should return data frames instead of printing so that we can search
 
 
 ############## VISUALIZATION METHODS ###############
@@ -25,17 +28,21 @@ class visualization:
     def box_plots(data, numerics, nonnumerics):
         """ Takes a list of numeric column names and non-numeric column names.
             returns matrix of box plots (rows = numerics)"""
-        if len(numerics) + len(nonnumerics) > 2:
-            fig, axes = plt.subplots(nrows=len(numerics), ncols=len(nonnumerics))
-
+        
+        fig, axes = plt.subplots(nrows=len(numerics), ncols=len(nonnumerics))
+        if len(numerics) > 1 and len(nonnumerics) > 1:
             for i in range(len(numerics)):
                 for j in range(len(nonnumerics)):
                     sns.boxplot(data[nonnumerics[j]], data[numerics[i]], ax=axes[i][j])
-            plt.show()
 
+        elif len(nonnumerics) == 1 and len(numerics) > 1:
+            for i in range(len(numerics)):
+                sns.boxplot(data[nonnumerics[0]], data[numerics[i]], ax=axes[i])
         else:
             sns.boxplot(data[nonnumerics[0]], data[numerics[0]])
-            plt.show()    
+            
+        plt.tight_layout() 
+        plt.show()    
 
     def dist_plots(data, bins = 10, kde = False):
         """ Get all density plots for columns. If kde enabled fit a curve to the plots"""
@@ -50,14 +57,22 @@ class visualization:
 
         for i in range(_data.shape[1]):
             sns.distplot(_data[_data.columns[i]], bins=bins, kde=kde, ax=axes[i])
-
+        plt.tight_layout()
         plt.show()
+        
 
-
-    def correlation_heatmap(data, annot=True):
+    def correlation_heatmap(data, fig_size = None, annot=True):
         """ Produce a correlation heatmap of the given columns"""
         corrs = data.corr()
+
+        if not fig_size:
+            num_numeric_cols = len(data.select_dtypes(np.number))
+            fig_size = (0.6*num_numeric_cols, 0.4*num_numeric_cols)
+
+        plt.figure(figsize=fig_size)
+
         sns.heatmap(corrs, annot=annot)
+        plt.tight_layout()
         plt.show()
 
 
@@ -225,37 +240,51 @@ class cleanimp:
         print(sd_comp_table)
 
 
-    def impute_values(data, method = SimpleFill):
-        # fit and transform the selected columns using selected imputation method
-        if not type(cols) == list:
-            raise ValueError('Cols needs to be a list.')
+    def impute_values(data, columns, method = SimpleFill):
+        """ fit and transform the selected columns using selected imputation method
+            splits data in numerical and categorical features and then recombines 
+            #REWRITE THIS FUNCTION
+        """
 
+        _data = data[columns].astype('float64')
         if method.__name__ != 'SimpleFill' and method.__name__ != 'em':
-            data = pd.DataFrame(method(verbose=False).fit_transform(data), columns=data.columns, index=data.index)
+            data.update(pd.DataFrame(method(verbose=False).fit_transform(_data)))
 
         elif method.__name__ == 'SimpleFill':
-            data = pd.DataFrame(method().fit_transform(data), columns=data.columns, index=data.index)
+            data.update(_data.fillna(_data.mean()))
 
         elif method.__name__ == 'em':
-            e =  em(data)
+            e =  em(_data)
             e.index = data.index
-            e.columns= data.columns
-            data = e
+            e.columns= _data.columns
+            _data = e
+
+            data.update(_data)
 
 
 ############## OUTLIER DETECTION METHODS ###############
 
 class outlier:
-    def univariate_outlier_analysis(data, sd = 3):
+    def univariate_outliers(data, sd = 3):
         """ Finds univariate outliers by scaling and looking at t-scores"""
 
-        # maybe this should tell you which outliers go with which column..
         _data = data.select_dtypes(include=[np.number])
         scaler = StandardScaler()
         scaled = pd.DataFrame(np.abs(scaler.fit_transform(_data)), index=_data.index)
 
-        print(_data.loc[(scaled > sd).any(axis=1)])
+        print(data.loc[(scaled > sd).any(axis=1)])
         
+    def univariate_outlier_analysis(data, sd = 3):
+        """ Find univariate outliers by column"""
+        _data = data.select_dtypes(include=[np.number])
+        scaler = StandardScaler()
+        scaled = pd.DataFrame(np.abs(scaler.fit_transform(_data)), index=_data.index, columns=_data.columns)
+        
+        for col in _data.columns:
+            col_outliers = (data.loc[(scaled[col] > sd)])
+            if not col_outliers.empty:
+                print(col)
+                print(col_outliers, '\n')
 
     def __ellipse_data(dep, indep, sd):
         """ Helper function to draw an ellipse on the principal components
@@ -286,29 +315,34 @@ class outlier:
         plt.show()
 
 
-    def bivariate_outlier_analysis(data, sd = 3):
+    def bivariate_outlier_analysis(data, hue=None, sd = 3):
         """ Returns a scattermatrix of data[cols] with principal component ellipses superimposed.
             Used to find specific plots to investigate with bivariate_outlier_ellipse"""
-        axes = sns.pairplot(data).axes
+        _data = data.select_dtypes(include=[np.number])
+        axes = sns.pairplot(_data, hue=hue).axes
         
-        for i in range(data.shape[1]):
-            for j in range(data.shape[1]):
+        for i in range(_data.shape[1]):
+            for j in range(_data.shape[1]):
                 if i != j:
-                    el = outlier.__ellipse_data(data[data.columns[j]], data[data.columns[i]], sd)
+                    el = outlier.__ellipse_data(_data[_data.columns[j]], _data[_data.columns[i]], sd)
                     el.set_facecolor('none')
                     axes[i][j].add_artist(el)
 
+        plt.tight_layout()
         plt.show()
 
 
-    def multivariate_outlier_analysis(data, sd = 2.5):
+    def multivariate_outlier_analysis(data, sd = 3):
         """ This is an implemenation of the Mahalanobis D^2 test.
             We compute the Mahalanobis distance for each observation and divide by the
             number of variables in our dataset.  Hair et all 2013 says this is distributed
-            roughly as a t-value, so we look for t valyes greated than sd.
+            roughly as a t-value, so we look for t values greated than sd.
+            
+            A potential outlier is indicated by a D2overDf score large than sd,
+            2-3 for small data, 3-4 for larger.
             WARNING: at this point we expect NO missing data"""
         
-        # center the data
+        # center the data. scale invariant, no need to standardize
         _data = data.select_dtypes(include=[np.number])
         cdata = _data - _data.mean()
         cov = cdata.cov()
@@ -344,7 +378,7 @@ class assumptions:
         for i in range(length):
             stat.probplot(_data[_data.columns[i]].loc[_data[_data.columns[i]].notnull()], plot=axes[i], fit=True)
             axes[i].set_title(_data.columns[i])
-
+        plt.tight_layout()
         plt.show()
 
 
@@ -364,8 +398,4 @@ class assumptions:
         pvals = pd.concat([skew_series, kurt_series, normal_pvals], axis=1)
         pvals.columns = ['Skew z-value', 'Kurtosis z-value', 'Normality p-value']
         print(pvals)
-
-
-    def test_multicolinearity(data, cor_vars):
-        """ Overall test of multicolinearity using VIF from ISLR"""
-        raise NotImplementedError('Oops, I\'ll get to this later. Maybe...')
+        
