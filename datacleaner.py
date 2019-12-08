@@ -18,14 +18,8 @@ from impyute.imputation.cs import em
 ############## VISUALIZATION METHODS ###############
 
 class visualization:
-    def scatter_matrix(data, hue=None, hue_order=None, palette=None, vars=None, x_vars=None, y_vars=None,\
-                kind='scatter', diag_kind='auto', markers=None, height=2.5, aspect=1, dropna=True, plot_kws=None, diag_kws=None, grid_kws=None, size=None):
-        """ Wrapper for Seaborn pairplot.  Baically never used, just for completion"""
-        sns.pairplot(data, hue=hue, hue_order=hue_order, palette=palette, vars=vars, x_vars=x_vars, y_vars=y_vars,\
-                kind=kind, diag_kind=diag_kind, markers=markers, height=height, aspect=aspect, dropna=dropna, plot_kws=plot_kws, diag_kws=diag_kws, grid_kws=grid_kws, size=size)
-        plt.show()
-
-    def box_plots(data, numerics, nonnumerics):
+	
+	def box_plots(data, numerics, nonnumerics):
         """ Takes a list of numeric column names and non-numeric column names.
             returns matrix of box plots (rows = numerics)"""
         
